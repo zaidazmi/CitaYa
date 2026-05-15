@@ -225,10 +225,4 @@ The bot auto-detects Chrome on macOS, Linux, and Windows. If detection fails, se
 
 ## Attribution
 
-CitaYa began as a substantial rewrite/refactor inspired by and derived from
-[`cita-bot`](https://github.com/cita-bot/cita-bot). Major changes include
-Playwright CDP with real Chrome, CapSolver support, broader procedure coverage,
-a modular package architecture, and many bug fixes.
-
-CitaYa remains licensed under AGPL-3.0 unless there is a clean legal path to
-relicense it.
+CitaYa is based on [`cita-bot`](https://github.com/cita-bot/cita-bot). It swaps Selenium for Playwright CDP over real Chrome, adds CapSolver captcha solving, supports more procedures, and breaks the single-file bot into a proper package. Lots of bugs fixed along the way.
