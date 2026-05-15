@@ -472,6 +472,8 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
     try:
         page.goto(url1, timeout=60000, wait_until="domcontentloaded")
     except Exception as e:
+        if "has been closed" in str(e):
+            raise  # bubble up so run() restarts the browser
         logging.error(f"Failed to load url1: {e}")
         return None
     time.sleep(random.uniform(2, 4))
@@ -479,6 +481,8 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
     try:
         page.goto(url2, timeout=60000, wait_until="domcontentloaded")
     except Exception as e:
+        if "has been closed" in str(e):
+            raise
         logging.error(f"Failed to load url2: {e}")
         return None
 
@@ -665,7 +669,10 @@ def run(context: CustomerProfile, max_attempts: int = DEFAULT_MAX_ATTEMPTS):
             time.sleep(waf_delay)
             continue
         except Exception as e:
-            logging.error(f"Error: {e}")
+            if "has been closed" in str(e):
+                logging.info("Browser was closed (mac locked / chrome crashed?) — restarting")
+            else:
+                logging.error(f"Error: {e}")
             close_browser(browser)
             browser = None
             browser_ref[0] = None
