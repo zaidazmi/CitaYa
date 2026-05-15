@@ -13,30 +13,33 @@ class CapSolverError(Exception):
     pass
 
 
-def capsolver_create_task(api_key: str, task: dict) -> dict:
-    resp = requests.post(
-        f"{CAPSOLVER_API_URL}/createTask",
-        json={"clientKey": api_key, "task": task},
-        timeout=30,
-    )
-    data = resp.json()
+def _capsolver_post(endpoint: str, payload: dict) -> dict:
+    try:
+        resp = requests.post(f"{CAPSOLVER_API_URL}/{endpoint}", json=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        raise CapSolverError(f"HTTP request failed: {e}") from e
+    except ValueError as e:
+        raise CapSolverError(f"Invalid JSON response from CapSolver: {e}") from e
+
     if data.get("errorId", 0) != 0:
         raise CapSolverError(f"{data.get('errorCode')}: {data.get('errorDescription')}")
     return data
 
 
+def capsolver_create_task(api_key: str, task: dict) -> dict:
+    return _capsolver_post("createTask", {"clientKey": api_key, "task": task})
+
+
 def capsolver_get_result(api_key: str, task_id: str, max_wait: int = 120) -> dict:
     for _ in range(max_wait // 3):
-        resp = requests.post(
-            f"{CAPSOLVER_API_URL}/getTaskResult",
-            json={"clientKey": api_key, "taskId": task_id},
-            timeout=30,
-        )
-        data = resp.json()
-        if data.get("errorId", 0) != 0:
-            raise CapSolverError(f"{data.get('errorCode')}: {data.get('errorDescription')}")
+        data = _capsolver_post("getTaskResult", {"clientKey": api_key, "taskId": task_id})
         if data.get("status") == "ready":
-            return data["solution"]
+            solution = data.get("solution")
+            if not isinstance(solution, dict):
+                raise CapSolverError("CapSolver returned a ready task without a solution")
+            return solution
         time.sleep(3)
     raise CapSolverError("Timed out waiting for captcha solution")
 
@@ -52,10 +55,19 @@ def capsolver_solve_recaptcha_v3(api_key: str, website_url: str, website_key: st
 
     data = capsolver_create_task(api_key, task)
     if data.get("status") == "ready":
-        return data["solution"]["gRecaptchaResponse"]
+        try:
+            return data["solution"]["gRecaptchaResponse"]
+        except KeyError as e:
+            raise CapSolverError("CapSolver response missing gRecaptchaResponse") from e
 
-    solution = capsolver_get_result(api_key, data["taskId"])
-    return solution["gRecaptchaResponse"]
+    task_id = data.get("taskId")
+    if not task_id:
+        raise CapSolverError("CapSolver response missing taskId")
+    solution = capsolver_get_result(api_key, task_id)
+    try:
+        return solution["gRecaptchaResponse"]
+    except KeyError as e:
+        raise CapSolverError("CapSolver response missing gRecaptchaResponse") from e
 
 
 def capsolver_solve_image(api_key: str, image_base64: str) -> str:
@@ -65,10 +77,19 @@ def capsolver_solve_image(api_key: str, image_base64: str) -> str:
     }
     data = capsolver_create_task(api_key, task)
     if data.get("status") == "ready":
-        return data["solution"]["text"]
+        try:
+            return data["solution"]["text"]
+        except KeyError as e:
+            raise CapSolverError("CapSolver response missing image captcha text") from e
 
-    solution = capsolver_get_result(api_key, data["taskId"])
-    return solution["text"]
+    task_id = data.get("taskId")
+    if not task_id:
+        raise CapSolverError("CapSolver response missing taskId")
+    solution = capsolver_get_result(api_key, task_id)
+    try:
+        return solution["text"]
+    except KeyError as e:
+        raise CapSolverError("CapSolver response missing image captcha text") from e
 
 
 def solve_captcha(page, context: CustomerProfile):
@@ -104,7 +125,10 @@ def _solve_recaptcha(page, context: CustomerProfile):
             page_action=page_action or "",
         )
         logging.info(f"CapSolver: reCAPTCHA solved ({len(g_response)} chars)")
-        page.evaluate(f"document.getElementById('g-recaptcha-response').value = '{g_response}'")
+        page.evaluate(
+            "(response) => { document.getElementById('g-recaptcha-response').value = response; }",
+            g_response,
+        )
         return True
     except CapSolverError as e:
         logging.error(f"CapSolver error: {e}")

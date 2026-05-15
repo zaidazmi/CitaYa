@@ -202,26 +202,40 @@ def _fill_applicant_info(page, context: CustomerProfile):
 # Date/office selection helpers
 # ---------------------------------------------------------------------------
 
+def _parse_appointment_date(date_text: str):
+    found = re.findall(r"\d{2}/\d{2}/\d{4}", date_text)
+    if not found:
+        return None
+    return dt.strptime(found[0], "%d/%m/%Y")
+
+
 def _best_matching_date(dates, context: CustomerProfile):
+    if not dates:
+        return None
     if not context.min_date and not context.max_date:
         return dates[0] if dates else None
 
-    pattern = re.compile(r"\d{2}/\d{2}/\d{4}")
     date_format = "%d/%m/%Y"
+    min_date = dt.strptime(context.min_date, date_format) if context.min_date else None
+    max_date = dt.strptime(context.max_date, date_format) if context.max_date else None
+    matches = []
 
     for date in dates:
         try:
-            found = pattern.findall(date)[0]
-            if found:
-                appt_date = dt.strptime(found, date_format)
-                if context.min_date and appt_date < dt.strptime(context.min_date, date_format):
-                    continue
-                if context.max_date and appt_date > dt.strptime(context.max_date, date_format):
-                    continue
-                return date
+            appt_date = _parse_appointment_date(date)
+            if not appt_date:
+                continue
+            if min_date and appt_date < min_date:
+                continue
+            if max_date and appt_date > max_date:
+                continue
+            matches.append((appt_date, date))
         except Exception as e:
             logging.error(e)
             continue
+
+    if matches:
+        return min(matches, key=lambda item: item[0])[1]
 
     logging.info(f"Nothing found for dates {context.min_date} - {context.max_date}, skipping")
     return None
@@ -230,7 +244,7 @@ def _best_matching_date(dates, context: CustomerProfile):
 def _best_slot_index(page, context: CustomerProfile):
     try:
         els = page.query_selector_all("[id^=lCita_]")
-        dates = sorted([el.text_content() for el in els])
+        dates = [el.text_content() for el in els]
         best_date = _best_matching_date(dates, context)
         if best_date:
             return dates.index(best_date) + 1
@@ -388,7 +402,7 @@ def _select_slot(page, context: CustomerProfile):
                 return result;
             }""")
 
-            best_date = _best_matching_date(sorted(slots.keys()), context)
+            best_date = _best_matching_date(list(slots.keys()), context)
             if not best_date:
                 return None
             slot = slots[best_date]
