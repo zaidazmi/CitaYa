@@ -1,0 +1,5 @@
+playwright>=1.40.0
+requests>=2.31.0
+
+# After installing, run:  playwright install chromium
+# (needed for Playwright's internal deps even though CitaYa uses real Chrome via CDP)
