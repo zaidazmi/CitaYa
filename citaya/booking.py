@@ -44,17 +44,66 @@ def _await_form(page, selector="#txtIdCitado"):
 
 
 def _click_doc_radio(page, doc_type: DocType):
+    selector = None
     if doc_type == DocType.PASSPORT:
-        page.click("#rdbTipoDocPas")
+        selector = "#rdbTipoDocPas"
     elif doc_type == DocType.NIE:
-        page.click("#rdbTipoDocNie")
+        selector = "#rdbTipoDocNie"
     elif doc_type == DocType.DNI:
-        page.click("#rdbTipoDocDni")
+        selector = "#rdbTipoDocDni"
+
+    if selector:
+        page.locator(selector).click()
+        time.sleep(random.uniform(0.5, 1.2))
+
+
+def _type_like_user(page, selector: str, value: str, delay_min: int = 70, delay_max: int = 140):
+    locator = page.locator(selector)
+    locator.scroll_into_view_if_needed()
+    locator.click()
+    time.sleep(random.uniform(0.2, 0.5))
+    page.keyboard.press("ControlOrMeta+A")
+    page.keyboard.press("Backspace")
+    page.keyboard.type(value, delay=random.randint(delay_min, delay_max))
+    page.dispatch_event(selector, "input")
+    page.dispatch_event(selector, "change")
+    time.sleep(random.uniform(0.7, 1.4))
 
 
 def _fill_doc_fields(page, context: CustomerProfile):
-    page.fill("#txtIdCitado", context.doc_value)
-    page.fill("#txtDesCitado", context.name)
+    _type_like_user(page, "#txtIdCitado", context.doc_value.upper(), 90, 160)
+    _type_like_user(page, "#txtDesCitado", context.name.upper(), 80, 140)
+
+
+def _select_country(page, context: CustomerProfile):
+    try:
+        page.select_option("#txtPaisNac", label=context.country)
+    except Exception:
+        option_value = page.evaluate("""(country) => {
+            const normalize = (value) => (value || "")
+                .normalize("NFD")
+                .replace(/[\\u0300-\\u036f]/g, "")
+                .trim()
+                .toUpperCase();
+            const expected = normalize(country);
+            const option = Array.from(document.querySelectorAll("#txtPaisNac option"))
+                .find((item) => normalize(item.textContent) === expected);
+            return option ? option.value : null;
+        }""", context.country)
+        if not option_value:
+            logging.error(f"Could not find nationality option: {context.country}")
+            return None
+        page.select_option("#txtPaisNac", value=option_value)
+
+    selected = page.evaluate("""() => {
+        const select = document.querySelector("#txtPaisNac");
+        return select?.selectedOptions?.[0]?.textContent?.trim() || "";
+    }""")
+    logging.info(f"[applicant-info] Nationality selected: {selected}")
+    page.dispatch_event("#txtPaisNac", "change")
+    page.locator("#txtPaisNac").blur()
+    time.sleep(random.uniform(1.2, 2.4))
+    return True
 
 
 def _form_expedicion_dggm(page, context: CustomerProfile):
@@ -69,10 +118,11 @@ def _form_expedicion_dggm(page, context: CustomerProfile):
 def _form_toma_huellas(page, context: CustomerProfile):
     if not _await_form(page, "#txtPaisNac"):
         return None
-    page.select_option("#txtPaisNac", label=context.country)
+    if not _await_form(page, "#txtIdCitado"):
+        return None
     _click_doc_radio(page, context.doc_type)
     _fill_doc_fields(page, context)
-    return True
+    return _select_country(page, context)
 
 
 def _form_recogida(page, context: CustomerProfile):
@@ -103,8 +153,7 @@ def _form_asignacion_nie(page, context: CustomerProfile):
         year_field = page.query_selector("#txtAnnoCitado")
         if year_field:
             year_field.fill(context.year_of_birth)
-    page.select_option("#txtPaisNac", label=context.country)
-    return True
+    return _select_country(page, context)
 
 
 _FORM_HANDLERS = {
@@ -245,12 +294,53 @@ def _best_slot_index(page, context: CustomerProfile):
     try:
         els = page.query_selector_all("[id^=lCita_]")
         dates = [el.text_content() for el in els]
+        if not dates:
+            dates = _slot_texts_from_radios(page)
         best_date = _best_matching_date(dates, context)
         if best_date:
             return dates.index(best_date) + 1
     except Exception as e:
         logging.error(e)
     return None
+
+
+def _slot_texts_from_radios(page):
+    return page.evaluate("""() => {
+        const radios = Array.from(document.querySelectorAll("input[type='radio'][name='rdbCita']"));
+        return radios.map((radio) => {
+            let node = radio.closest("label") || radio.closest("td") || radio.closest("div") || radio.parentElement;
+            while (node && node.parentElement) {
+                const text = (node.innerText || node.textContent || "").trim();
+                if (/\\d{2}\\/\\d{2}\\/\\d{4}/.test(text) || /D[ií]a\\s*:/i.test(text)) {
+                    return text;
+                }
+                node = node.parentElement;
+            }
+            return (radio.value || "").trim();
+        });
+    }""")
+
+
+def _has_five_minute_slot_page(resp_text: str):
+    upper_text = resp_text.upper()
+    return "DISPONE DE 5 MINUTOS" in upper_text or "DISPONES DE 5 MINUTOS" in upper_text
+
+
+def _save_debug_page(page, context: CustomerProfile, prefix: str):
+    if not context.save_screenshots:
+        return
+
+    path_prefix = f"{prefix}-{dt.now()}".replace(":", "-")
+    try:
+        page.screenshot(path=f"{path_prefix}.png", full_page=True)
+    except Exception as e:
+        logging.error(f"Could not save debug screenshot: {e}")
+
+    try:
+        with open(f"{path_prefix}.html", "w", encoding="utf-8") as f:
+            f.write(page.content())
+    except Exception as e:
+        logging.error(f"Could not save debug HTML: {e}")
 
 
 def _pick_office(page, context: CustomerProfile):
@@ -295,18 +385,30 @@ def _pick_office(page, context: CustomerProfile):
 
 
 def _submit_office(page, context: CustomerProfile):
-    try:
-        page.wait_for_function("typeof enviar === 'function'", timeout=PAGE_TIMEOUT)
-    except Exception:
-        logging.error("enviar() JS function never appeared on page")
-        return None
-
-    page.evaluate("enviar('solicitud');")
-    time.sleep(random.uniform(2, 4))
-
     resp_text = get_page_text(page)
+    if _is_identity_action_page(resp_text) or _has_solicitar_cita_control(page):
+        logging.info("[identity] Requesting appointment")
+        if not _click_solicitar_cita(page):
+            return None
+        time.sleep(random.uniform(2, 4))
+        resp_text = get_page_text(page)
+    elif not _is_office_selection_page(page, resp_text):
+        try:
+            page.wait_for_function("typeof enviar === 'function'", timeout=PAGE_TIMEOUT)
+        except Exception:
+            if "requested URL was rejected" in resp_text:
+                logging.warning(f"WAF blocked after applicant form (url: {page.url})")
+                _save_debug_page(page, context, "waf-after-applicant")
+                raise WAFBlocked("WAF blocked after applicant form")
+            logging.error(f"[post-applicant] Unexpected page before office selection: {resp_text[:300]}")
+            _save_debug_page(page, context, "post-applicant-unexpected")
+            return None
 
-    if "Seleccione la oficina donde solicitar la cita" in resp_text:
+        page.evaluate("enviar('solicitud');")
+        time.sleep(random.uniform(2, 4))
+        resp_text = get_page_text(page)
+
+    if _is_office_selection_page(page, resp_text):
         logging.info("[office] Selecting office")
         try:
             page.wait_for_selector("#btnSiguiente", timeout=PAGE_TIMEOUT)
@@ -314,9 +416,12 @@ def _submit_office(page, context: CustomerProfile):
             logging.error("Timed out waiting for offices to load")
             return None
 
-        res = _pick_office(page, context)
-        if res is None:
-            return None
+        if page.query_selector("#idSede"):
+            res = _pick_office(page, context)
+            if res is None:
+                return None
+        else:
+            logging.info("[office] Office already selected by site")
 
         page.click("#btnSiguiente")
         return True
@@ -328,6 +433,71 @@ def _submit_office(page, context: CustomerProfile):
         if context.save_screenshots:
             page.screenshot(path=f"office-unexpected-{dt.now()}.png".replace(":", "-"))
         return None
+
+
+def _is_identity_action_page(resp_text: str):
+    text = resp_text.lower()
+    return "identidad del usuario de cita" in text and (
+        "solicitar cita" in text
+        or "consultar citas confirmadas" in text
+        or "anular cita" in text
+    )
+
+
+def _has_solicitar_cita_control(page):
+    try:
+        return bool(page.evaluate("""() => {
+            const buttonLike = "input[type='button'], input[type='submit'], button, a, [role='button']";
+            const clickHandlers = "div[onclick], span[onclick], li[onclick]";
+            return [
+                ...Array.from(document.querySelectorAll(buttonLike)),
+                ...Array.from(document.querySelectorAll(clickHandlers)),
+            ].some((el) => {
+                const label = ((el.value || el.innerText || el.textContent || "") + "").trim();
+                return /Solicitar\\s+Cita/i.test(label);
+            });
+        }"""))
+    except Exception:
+        return False
+
+
+def _click_solicitar_cita(page):
+    try:
+        clicked = page.evaluate("""() => {
+            const buttonLike = "input[type='button'], input[type='submit'], button, a, [role='button']";
+            const clickHandlers = "div[onclick], span[onclick], li[onclick]";
+            const candidates = [
+                ...Array.from(document.querySelectorAll(buttonLike)),
+                ...Array.from(document.querySelectorAll(clickHandlers)),
+            ];
+            const match = candidates.find((el) => {
+                const label = ((el.value || el.innerText || el.textContent || "") + "").trim();
+                return /Solicitar\\s+Cita/i.test(label);
+            });
+            if (!match) return false;
+            match.scrollIntoView({ block: "center", inline: "center" });
+            match.click();
+            return true;
+        }""")
+        if clicked:
+            return True
+    except Exception as e:
+        logging.error(f"[identity] Could not click Solicitar Cita: {e}")
+
+    try:
+        page.evaluate("enviar('solicitud');")
+        return True
+    except Exception as e:
+        logging.error(f"[identity] Could not request appointment: {e}")
+        return False
+
+
+def _is_office_selection_page(page, resp_text: str):
+    return (
+        "Seleccione la oficina donde solicitar la cita" in resp_text
+        or "Selecciona Oficina" in resp_text
+        or bool(page.query_selector("#idSede"))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -342,15 +512,22 @@ def _submit_contact(page, context: CustomerProfile):
         logging.error("Timed out waiting for contact info page")
         return None
 
-    page.fill("#txtTelefonoCitado", context.phone)
+    time.sleep(random.uniform(2, 4))
+    _type_like_user(page, "#txtTelefonoCitado", context.phone, 80, 140)
 
     try:
-        page.fill("#emailUNO", context.email)
-        page.fill("#emailDOS", context.email)
+        _type_like_user(page, "#emailUNO", context.email, 45, 95)
+        _type_like_user(page, "#emailDOS", context.email, 45, 95)
     except Exception:
         pass
 
-    page.evaluate("enviar();")
+    _save_debug_page(page, context, "contact-filled")
+    time.sleep(random.uniform(2, 4))
+    page.locator("input[value='Siguiente'], #btnSiguiente").first.click()
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=15000)
+    except Exception:
+        pass
     time.sleep(random.uniform(2, 4))
 
     return _select_slot(page, context)
@@ -359,7 +536,7 @@ def _submit_contact(page, context: CustomerProfile):
 def _select_slot(page, context: CustomerProfile):
     resp_text = get_page_text(page)
 
-    if "DISPONE DE 5 MINUTOS" in resp_text:
+    if _has_five_minute_slot_page(resp_text):
         logging.info("[slot] Available slots found!")
         if context.save_screenshots:
             page.screenshot(path=f"citas-{dt.now()}.png".replace(":", "-"))
@@ -417,7 +594,8 @@ def _select_slot(page, context: CustomerProfile):
             logging.error(e)
             return None
     else:
-        logging.info("[slot] No slots in response")
+        logging.info(f"[slot] No slots in response (body: {resp_text[:300]})")
+        _save_debug_page(page, context, "slot-unrecognized")
         return None
 
     # Confirmation
@@ -484,20 +662,11 @@ def _confirm(page, context: CustomerProfile):
 def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
     time.sleep(random.uniform(1, 3))
     try:
-        page.goto(url1, timeout=60000, wait_until="domcontentloaded")
+        _open_operation_info(page, context, url1, url2)
     except Exception as e:
         if "has been closed" in str(e):
             raise  # bubble up so run() restarts the browser
-        logging.error(f"Failed to load url1: {e}")
-        return None
-    time.sleep(random.uniform(2, 4))
-
-    try:
-        page.goto(url2, timeout=60000, wait_until="domcontentloaded")
-    except Exception as e:
-        if "has been closed" in str(e):
-            raise
-        logging.error(f"Failed to load url2: {e}")
+        logging.error(f"Failed to load operation info page: {e}")
         return None
 
     logging.info("Waiting for ICP page to load (WAF challenge may run)...")
@@ -518,7 +687,7 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
                 page.screenshot(path=f"load-fail-{dt.now()}.png".replace(":", "-"))
             return None
 
-    logging.info("ICP page loaded — #btnEntrar found")
+    logging.info("ICP page loaded — sin Cl@ve option (#btnEntrar) found")
 
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
@@ -546,26 +715,36 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
             raise WAFBlocked("WAF blocked after Entrar")
         else:
             logging.error(f"Form page did not load after Entrar (body: {resp_text[:150]})")
+            _save_debug_page(page, context, "form-load-fail-after-entrar")
             return None
 
     logging.info("Form page loaded after Entrar")
 
     page.on("dialog", lambda d: d.accept())
 
+    time.sleep(random.uniform(3, 6))
     logging.info("[applicant-info] Filling personal details")
     success = _fill_applicant_info(page, context)
 
     if not success:
         return None
 
-    time.sleep(random.uniform(1, 2))
-    page.click("#btnEnviar")
+    _save_debug_page(page, context, "applicant-filled")
+    time.sleep(random.uniform(6, 11))
+    page.locator("#btnEnviar").scroll_into_view_if_needed()
+    page.locator("#btnEnviar").click()
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=15000)
+    except Exception:
+        pass
     time.sleep(random.uniform(3, 5))
 
     resp_text = get_page_text(page)
-    if "no hay citas disponibles" in resp_text:
-        logging.info("[office] No appointments available — will retry")
+    if "no hay citas disponibles" in resp_text.lower():
+        logging.info("[applicant-info] Server returned no appointments immediately after applicant form")
+        _save_debug_page(page, context, "no-citas-after-applicant")
         return "NO_CITAS"
+    _save_debug_page(page, context, "post-applicant")
 
     if context.wait_exact_time:
         logging.info("Waiting for exact time...")
@@ -600,17 +779,67 @@ def _build_target_urls(context: CustomerProfile):
     elif context.province == Province.MÁLAGA:
         operation_category = "icpplustiem"
 
-    if context.province in _SINGLE_GROUP_PROVINCES:
-        operation_param = "tramiteGrupo[0]"
-    elif context.operation_code in _EXTRANJERIA_OPERATIONS:
-        operation_param = "tramiteGrupo[0]"
-    else:
-        operation_param = "tramiteGrupo[1]"
+    operation_param = _operation_param_name(context)
 
     base = "https://icp.administracionelectronica.gob.es"
     url1 = f"{base}/{operation_category}/citar?p={context.province.value}"
     url2 = f"{base}/{operation_category}/acInfo?{operation_param}={context.operation_code.value}"
     return url1, url2
+
+
+def _operation_param_name(context: CustomerProfile):
+    if context.province in _SINGLE_GROUP_PROVINCES:
+        return "tramiteGrupo[0]"
+    if context.operation_code in _EXTRANJERIA_OPERATIONS:
+        return "tramiteGrupo[0]"
+    return "tramiteGrupo[1]"
+
+
+def _open_operation_info(page, context: CustomerProfile, url1: str, url2: str):
+    page.goto(url1, timeout=60000, wait_until="domcontentloaded")
+    time.sleep(random.uniform(2, 4))
+    close_cookie_banner(page)
+
+    if _submit_operation_from_portada(page, context):
+        time.sleep(random.uniform(2, 4))
+        return True
+
+    logging.info("[operation] Falling back to direct operation URL")
+    page.goto(url2, timeout=60000, wait_until="domcontentloaded")
+    time.sleep(random.uniform(2, 4))
+    close_cookie_banner(page)
+    return True
+
+
+def _submit_operation_from_portada(page, context: CustomerProfile):
+    operation_param = _operation_param_name(context)
+    selector = f"select[name='{operation_param}']"
+
+    try:
+        page.wait_for_selector(selector, timeout=PAGE_TIMEOUT)
+    except Exception:
+        logging.info("[operation] Procedure selector not found on province page")
+        return False
+
+    try:
+        logging.info(f"[operation] Selecting {operation_param}={context.operation_code.value}")
+        page.select_option(selector, value=context.operation_code.value)
+    except Exception as e:
+        logging.error(f"[operation] Procedure option unavailable: {e}")
+        return False
+
+    try:
+        if context.save_screenshots:
+            page.screenshot(path=f"operation-selected-{dt.now()}.png".replace(":", "-"))
+
+        if page.query_selector("#btnAceptar"):
+            page.click("#btnAceptar")
+        else:
+            page.evaluate("envia();")
+        return True
+    except Exception as e:
+        logging.error(f"[operation] Failed to submit procedure selection: {e}")
+        return False
 
 
 def run(context: CustomerProfile, max_attempts: int = DEFAULT_MAX_ATTEMPTS):
@@ -655,6 +884,9 @@ def run(context: CustomerProfile, max_attempts: int = DEFAULT_MAX_ATTEMPTS):
                     page.screenshot(path=f"WIN-{dt.now()}.png".replace(":", "-"))
                 close_browser(browser)
                 return True
+
+            if i == max_attempts - 1:
+                break
 
             try:
                 page.goto("about:blank")

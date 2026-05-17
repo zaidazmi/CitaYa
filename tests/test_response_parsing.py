@@ -11,6 +11,8 @@ EDGE CASES:
   - No false positives between states
 """
 
+from citaya.booking import _has_five_minute_slot_page
+
 
 class TestWAFDetection:
 
@@ -64,7 +66,11 @@ class TestSlotSelectionDetection:
 
     def test_detects_5_minutes_variant(self):
         body = "DISPONE DE 5 MINUTOS para completar su cita"
-        assert "DISPONE DE 5 MINUTOS" in body
+        assert _has_five_minute_slot_page(body)
+
+    def test_detects_5_minutes_informal_variant(self):
+        body = "DISPONES DE 5 MINUTOS para completar la confirmación de esta cita"
+        assert _has_five_minute_slot_page(body)
 
     def test_detects_seleccione_citas_variant(self):
         body = "Seleccione una de las siguientes citas disponibles"

@@ -36,10 +36,11 @@ Chrome (real browser)  -->  Playwright via CDP  -->  ICP appointment site
 
 1. Launches **your real Chrome** with remote debugging
 2. Playwright connects via CDP — the WAF sees a genuine browser session
-3. Navigates the appointment flow and fills your personal info
+3. Selects the province procedure, enters through **sin Cl@ve**, and fills your personal info
 4. Polls for available slots (~30s between checks)
-5. When a slot appears: selects office, solves captcha, confirms booking
-6. Saves a screenshot of the confirmation
+5. Handles province-specific intermediate pages like **Solicitar Cita** and preselected offices
+6. When a slot appears: fills contact details, solves captcha, selects the slot, confirms booking
+7. Saves a screenshot of the confirmation
 
 ### Why real Chrome?
 
@@ -232,6 +233,19 @@ The bot auto-detects WAF blocks, restarts the browser with a fresh session, and 
 <summary><strong>Rate limited (429)?</strong></summary>
 
 Auto-detected — the bot backs off 30-60 seconds.
+</details>
+
+<details>
+<summary><strong>Manual flow shows appointments, but the bot says no citas?</strong></summary>
+
+Make sure you are on the latest code and run with `save_screenshots=True`. Some provinces, including Salamanca for `TOMA_HUELLAS`, show extra pages after the applicant form:
+
+1. `Identidad del usuario de cita` with a `Solicitar Cita` button
+2. `Selecciona Oficina`, sometimes with the office already selected
+3. Contact details
+4. Slot and captcha page
+
+CitaYa handles this flow, but screenshots are the fastest way to confirm where the site diverged. Also check that `province`, `operation_code`, `doc_type`, and `country` exactly match the manual flow.
 </details>
 
 <details>
