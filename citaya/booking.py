@@ -57,25 +57,43 @@ def _click_doc_radio(page, doc_type: DocType):
         time.sleep(random.uniform(0.5, 1.2))
 
 
+def _move_mouse_to_element(page, selector: str):
+    box = page.locator(selector).bounding_box()
+    if box:
+        x = box["x"] + box["width"] * random.uniform(0.3, 0.7)
+        y = box["y"] + box["height"] * random.uniform(0.3, 0.7)
+        page.mouse.move(x, y, steps=random.randint(8, 20))
+        time.sleep(random.uniform(0.1, 0.3))
+
+
+def _human_pause():
+    time.sleep(random.uniform(1.0, 2.5))
+
+
 def _type_like_user(page, selector: str, value: str, delay_min: int = 70, delay_max: int = 140):
     locator = page.locator(selector)
     locator.scroll_into_view_if_needed()
+    time.sleep(random.uniform(0.3, 0.7))
+    _move_mouse_to_element(page, selector)
     locator.click()
-    time.sleep(random.uniform(0.2, 0.5))
+    time.sleep(random.uniform(0.3, 0.8))
     page.keyboard.press("ControlOrMeta+A")
     page.keyboard.press("Backspace")
+    time.sleep(random.uniform(0.1, 0.3))
     page.keyboard.type(value, delay=random.randint(delay_min, delay_max))
-    page.dispatch_event(selector, "input")
-    page.dispatch_event(selector, "change")
     time.sleep(random.uniform(0.7, 1.4))
 
 
 def _fill_doc_fields(page, context: CustomerProfile):
     _type_like_user(page, "#txtIdCitado", context.doc_value.upper(), 90, 160)
+    _human_pause()
     _type_like_user(page, "#txtDesCitado", context.name.upper(), 80, 140)
 
 
 def _select_country(page, context: CustomerProfile):
+    _human_pause()
+    _move_mouse_to_element(page, "#txtPaisNac")
+    time.sleep(random.uniform(0.3, 0.6))
     try:
         page.select_option("#txtPaisNac", label=context.country)
     except Exception:
@@ -100,7 +118,6 @@ def _select_country(page, context: CustomerProfile):
         return select?.selectedOptions?.[0]?.textContent?.trim() || "";
     }""")
     logging.info(f"[applicant-info] Nationality selected: {selected}")
-    page.dispatch_event("#txtPaisNac", "change")
     page.locator("#txtPaisNac").blur()
     time.sleep(random.uniform(1.2, 2.4))
     return True
@@ -694,14 +711,20 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
     except Exception:
         pass
 
+    for _ in range(random.randint(2, 4)):
+        page.mouse.move(random.randint(100, 700), random.randint(150, 400), steps=random.randint(5, 15))
+        time.sleep(random.uniform(0.5, 1.5))
+
     cookies = page.context.cookies()
     cookie_names = [c["name"] for c in cookies]
     logging.info(f"Cookies before Entrar: {cookie_names}")
 
     close_cookie_banner(page)
 
-    page.evaluate("window.scrollBy(0, Math.floor(Math.random() * 150 + 50))")
+    page.mouse.wheel(0, random.randint(80, 200))
     time.sleep(random.uniform(3, 6))
+    _move_mouse_to_element(page, "#btnEntrar")
+    time.sleep(random.uniform(0.3, 0.8))
     page.click("#btnEntrar")
 
     try:
@@ -722,7 +745,10 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
 
     page.on("dialog", lambda d: d.accept())
 
-    time.sleep(random.uniform(3, 6))
+    for _ in range(random.randint(2, 4)):
+        page.mouse.move(random.randint(200, 600), random.randint(200, 500), steps=random.randint(5, 15))
+        time.sleep(random.uniform(0.8, 2.0))
+    time.sleep(random.uniform(1, 3))
     logging.info("[applicant-info] Filling personal details")
     success = _fill_applicant_info(page, context)
 
@@ -730,8 +756,12 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
         return None
 
     _save_debug_page(page, context, "applicant-filled")
-    time.sleep(random.uniform(6, 11))
+    time.sleep(random.uniform(4, 7))
+    page.mouse.wheel(0, random.randint(50, 150))
+    time.sleep(random.uniform(2, 4))
     page.locator("#btnEnviar").scroll_into_view_if_needed()
+    _move_mouse_to_element(page, "#btnEnviar")
+    time.sleep(random.uniform(0.5, 1.2))
     page.locator("#btnEnviar").click()
     try:
         page.wait_for_load_state("domcontentloaded", timeout=15000)

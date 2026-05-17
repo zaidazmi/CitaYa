@@ -8,7 +8,7 @@ Automated *cita previa* booking for Spanish immigration offices.\
 Runs 24/7 on your machine until it locks down your appointment.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776ab?logo=python&logoColor=white)](https://python.org)
-[![Playwright](https://img.shields.io/badge/playwright-CDP-2ead33?logo=playwright&logoColor=white)](https://playwright.dev)
+[![Patchright](https://img.shields.io/badge/patchright-CDP-2ead33?logo=playwright&logoColor=white)](https://github.com/AresS31/patchright)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 </div>
@@ -28,14 +28,14 @@ Anyone who has tried to book a *cita previa* knows the pain: slots appear for se
 **How it works:**
 
 ```
-Chrome (real browser)  -->  Playwright via CDP  -->  ICP appointment site
+Chrome (real browser)  -->  Patchright via CDP  -->  ICP appointment site
        |                         |                         |
   F5 WAF sees a                Fills forms,           Polls every ~30s,
   genuine session              solves captcha         grabs first slot
 ```
 
 1. Launches **your real Chrome** with remote debugging
-2. Playwright connects via CDP — the WAF sees a genuine browser session
+2. Patchright connects via CDP — the WAF sees a genuine browser session
 3. Selects the province procedure, enters through **sin Cl@ve**, and fills your personal info
 4. Polls for available slots (~30s between checks)
 5. Handles province-specific intermediate pages like **Solicitar Cita** and preselected offices
@@ -44,7 +44,7 @@ Chrome (real browser)  -->  Playwright via CDP  -->  ICP appointment site
 
 ### Why real Chrome?
 
-The ICP site runs **F5 Shape Security** which fingerprints the browser deeply — TLS handshake, JS engine, canvas, WebGL. Headless browsers get caught. Real Chrome via CDP passes because F5 sees an authentic browser with matching fingerprints.
+The ICP site runs **F5 Shape Security** which fingerprints the browser deeply — TLS handshake, JS engine, canvas, WebGL. Headless browsers and standard Playwright get caught. CitaYa uses [Patchright](https://github.com/AresS31/patchright), a Playwright fork that avoids leaking `Runtime.enable` and other CDP markers, over real Chrome so F5 sees an authentic browser with matching fingerprints.
 
 ## Quick start
 
@@ -64,7 +64,7 @@ cd CitaYa
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-playwright install chromium
+patchright install chromium
 ```
 
 ### Run
@@ -276,4 +276,4 @@ Contributions are welcome! If you've tested a new province, found a bug, or want
 
 ## Acknowledgments
 
-CitaYa is based on [`cita-bot`](https://github.com/cita-bot/cita-bot). It swaps Selenium for Playwright CDP over real Chrome, adds CapSolver captcha solving, supports more procedures, and restructures the project as a proper Python package.
+CitaYa is based on [`cita-bot`](https://github.com/cita-bot/cita-bot). It swaps Selenium for Patchright CDP over real Chrome, adds CapSolver captcha solving, supports more procedures, and restructures the project as a proper Python package.

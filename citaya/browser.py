@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import time
 
-from playwright.sync_api import sync_playwright
+from patchright.sync_api import sync_playwright
 
 from .models import CustomerProfile
 
