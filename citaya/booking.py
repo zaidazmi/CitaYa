@@ -53,6 +53,8 @@ def _click_doc_radio(page, doc_type: DocType):
         selector = "#rdbTipoDocDni"
 
     if selector:
+        _move_mouse_to_element(page, selector)
+        time.sleep(random.uniform(0.2, 0.5))
         page.locator(selector).click()
         time.sleep(random.uniform(0.5, 1.2))
 
@@ -127,6 +129,8 @@ def _form_expedicion_dggm(page, context: CustomerProfile):
     if not _await_form(page):
         return None
     if context.doc_type == DocType.NIE:
+        _move_mouse_to_element(page, "#rdbTipoDocNie")
+        time.sleep(random.uniform(0.3, 0.7))
         page.click("#rdbTipoDocNie")
     _fill_doc_fields(page, context)
     return True
@@ -164,6 +168,8 @@ def _form_asignacion_nie(page, context: CustomerProfile):
     if context.doc_type == DocType.PASSPORT:
         pas = page.query_selector("#rdbTipoDocPas")
         if pas:
+            _move_mouse_to_element(page, "#rdbTipoDocPas")
+            time.sleep(random.uniform(0.2, 0.5))
             pas.click()
     _fill_doc_fields(page, context)
     if context.year_of_birth:
@@ -343,11 +349,19 @@ def _has_five_minute_slot_page(resp_text: str):
     return "DISPONE DE 5 MINUTOS" in upper_text or "DISPONES DE 5 MINUTOS" in upper_text
 
 
+_DEBUG_DIR = os.path.join(os.getcwd(), "debug")
+
+
+def _debug_path(filename: str) -> str:
+    os.makedirs(_DEBUG_DIR, exist_ok=True)
+    return os.path.join(_DEBUG_DIR, filename)
+
+
 def _save_debug_page(page, context: CustomerProfile, prefix: str):
     if not context.save_screenshots:
         return
 
-    path_prefix = f"{prefix}-{dt.now()}".replace(":", "-")
+    path_prefix = _debug_path(f"{prefix}-{dt.now()}".replace(":", "-"))
     try:
         page.screenshot(path=f"{path_prefix}.png", full_page=True)
     except Exception as e:
@@ -369,7 +383,7 @@ def _pick_office(page, context: CustomerProfile):
 
     if context.save_screenshots:
         html = page.inner_html("#idSede")
-        offices_path = os.path.join(os.getcwd(), f"offices-{dt.now()}.html".replace(":", "-"))
+        offices_path = _debug_path(f"offices-{dt.now()}.html".replace(":", "-"))
         with open(offices_path, "w", encoding="utf-8") as f:
             f.write(html)
 
@@ -433,6 +447,10 @@ def _submit_office(page, context: CustomerProfile):
             logging.error("Timed out waiting for offices to load")
             return None
 
+        for _ in range(random.randint(2, 3)):
+            page.mouse.move(random.randint(150, 600), random.randint(200, 450), steps=random.randint(5, 15))
+            time.sleep(random.uniform(0.5, 1.5))
+
         if page.query_selector("#idSede"):
             res = _pick_office(page, context)
             if res is None:
@@ -440,6 +458,9 @@ def _submit_office(page, context: CustomerProfile):
         else:
             logging.info("[office] Office already selected by site")
 
+        time.sleep(random.uniform(1, 3))
+        _move_mouse_to_element(page, "#btnSiguiente")
+        time.sleep(random.uniform(0.3, 0.8))
         page.click("#btnSiguiente")
         return True
     elif "En este momento no hay citas disponibles" in resp_text:
@@ -448,7 +469,7 @@ def _submit_office(page, context: CustomerProfile):
     else:
         logging.info(f"[office] Unexpected response: {resp_text[:200]}")
         if context.save_screenshots:
-            page.screenshot(path=f"office-unexpected-{dt.now()}.png".replace(":", "-"))
+            page.screenshot(path=_debug_path(f"office-unexpected-{dt.now()}.png".replace(":", "-")))
         return None
 
 
@@ -480,24 +501,22 @@ def _has_solicitar_cita_control(page):
 
 def _click_solicitar_cita(page):
     try:
-        clicked = page.evaluate("""() => {
-            const buttonLike = "input[type='button'], input[type='submit'], button, a, [role='button']";
-            const clickHandlers = "div[onclick], span[onclick], li[onclick]";
-            const candidates = [
-                ...Array.from(document.querySelectorAll(buttonLike)),
-                ...Array.from(document.querySelectorAll(clickHandlers)),
-            ];
-            const match = candidates.find((el) => {
-                const label = ((el.value || el.innerText || el.textContent || "") + "").trim();
-                return /Solicitar\\s+Cita/i.test(label);
-            });
-            if (!match) return false;
-            match.scrollIntoView({ block: "center", inline: "center" });
-            match.click();
-            return true;
-        }""")
-        if clicked:
-            return True
+        selectors = "input[type='button'], input[type='submit'], button, a, [role='button'], div[onclick], span[onclick], li[onclick]"
+        for el in page.query_selector_all(selectors):
+            label = (el.get_attribute("value") or el.inner_text() or "").strip()
+            if re.search(r"Solicitar\s+Cita", label, re.IGNORECASE):
+                el.scroll_into_view_if_needed()
+                time.sleep(random.uniform(0.5, 1.0))
+                box = el.bounding_box()
+                if box:
+                    page.mouse.move(
+                        box["x"] + box["width"] * random.uniform(0.3, 0.7),
+                        box["y"] + box["height"] * random.uniform(0.3, 0.7),
+                        steps=random.randint(8, 20),
+                    )
+                    time.sleep(random.uniform(0.2, 0.5))
+                el.click()
+                return True
     except Exception as e:
         logging.error(f"[identity] Could not click Solicitar Cita: {e}")
 
@@ -529,18 +548,30 @@ def _submit_contact(page, context: CustomerProfile):
         logging.error("Timed out waiting for contact info page")
         return None
 
-    time.sleep(random.uniform(2, 4))
+    for _ in range(random.randint(2, 3)):
+        page.mouse.move(random.randint(200, 600), random.randint(200, 500), steps=random.randint(5, 15))
+        time.sleep(random.uniform(0.8, 2.0))
+    time.sleep(random.uniform(1, 3))
+
     _type_like_user(page, "#txtTelefonoCitado", context.phone, 80, 140)
 
     try:
+        _human_pause()
         _type_like_user(page, "#emailUNO", context.email, 45, 95)
+        _human_pause()
         _type_like_user(page, "#emailDOS", context.email, 45, 95)
     except Exception:
         pass
 
     _save_debug_page(page, context, "contact-filled")
-    time.sleep(random.uniform(2, 4))
-    page.locator("input[value='Siguiente'], #btnSiguiente").first.click()
+    time.sleep(random.uniform(3, 5))
+    page.mouse.wheel(0, random.randint(50, 150))
+    time.sleep(random.uniform(1, 3))
+    siguiente = page.locator("input[value='Siguiente'], #btnSiguiente").first
+    siguiente.scroll_into_view_if_needed()
+    _move_mouse_to_element(page, "input[value='Siguiente'], #btnSiguiente")
+    time.sleep(random.uniform(0.5, 1.2))
+    siguiente.click()
     try:
         page.wait_for_load_state("domcontentloaded", timeout=15000)
     except Exception:
@@ -556,27 +587,56 @@ def _select_slot(page, context: CustomerProfile):
     if _has_five_minute_slot_page(resp_text):
         logging.info("[slot] Available slots found!")
         if context.save_screenshots:
-            page.screenshot(path=f"citas-{dt.now()}.png".replace(":", "-"))
+            page.screenshot(path=_debug_path(f"citas-{dt.now()}.png".replace(":", "-")))
+
+        for _ in range(random.randint(2, 3)):
+            page.mouse.move(random.randint(150, 600), random.randint(150, 450), steps=random.randint(5, 15))
+            time.sleep(random.uniform(0.5, 1.5))
 
         position = _best_slot_index(page, context)
         if not position:
             return None
 
-        time.sleep(2)
+        time.sleep(random.uniform(1, 3))
         if not solve_captcha(page, context):
             return None
 
         radios = page.query_selector_all("input[type='radio'][name='rdbCita']")
         if position - 1 < len(radios):
+            box = radios[position - 1].bounding_box()
+            if box:
+                page.mouse.move(
+                    box["x"] + box["width"] * random.uniform(0.3, 0.7),
+                    box["y"] + box["height"] * random.uniform(0.3, 0.7),
+                    steps=random.randint(8, 20),
+                )
+                time.sleep(random.uniform(0.2, 0.5))
             radios[position - 1].click()
+            time.sleep(random.uniform(0.5, 1.0))
 
-        page.evaluate("envia();")
-        time.sleep(1)
+        submit = page.query_selector("#btnEnviar") or page.query_selector("#btnSiguiente")
+        if submit:
+            box = submit.bounding_box()
+            if box:
+                page.mouse.move(
+                    box["x"] + box["width"] * random.uniform(0.3, 0.7),
+                    box["y"] + box["height"] * random.uniform(0.3, 0.7),
+                    steps=random.randint(8, 20),
+                )
+                time.sleep(random.uniform(0.3, 0.7))
+            submit.click()
+        else:
+            page.evaluate("typeof envia === 'function' ? envia() : document.forms[0].submit()")
+        time.sleep(random.uniform(1, 2))
 
     elif "Seleccione una de las siguientes citas disponibles" in resp_text:
         logging.info("[slot] Available slots found!")
         if context.save_screenshots:
-            page.screenshot(path=f"citas-{dt.now()}.png".replace(":", "-"))
+            page.screenshot(path=_debug_path(f"citas-{dt.now()}.png".replace(":", "-")))
+
+        for _ in range(random.randint(2, 3)):
+            page.mouse.move(random.randint(150, 600), random.randint(150, 450), steps=random.randint(5, 15))
+            time.sleep(random.uniform(0.5, 1.5))
 
         try:
             slots = page.evaluate("""() => {
@@ -643,13 +703,24 @@ def _select_slot(page, context: CustomerProfile):
     else:
         logging.info("[confirm] Missed confirmation page")
         if context.save_screenshots:
-            page.screenshot(path=f"failed-confirmation-{dt.now()}.png".replace(":", "-"))
+            page.screenshot(path=_debug_path(f"failed-confirmation-{dt.now()}.png".replace(":", "-")))
         return None
 
 
 def _confirm(page, context: CustomerProfile):
+    for _ in range(random.randint(1, 3)):
+        page.mouse.move(random.randint(150, 600), random.randint(150, 450), steps=random.randint(5, 15))
+        time.sleep(random.uniform(0.5, 1.0))
+    _move_mouse_to_element(page, "#chkTotal")
+    time.sleep(random.uniform(0.3, 0.7))
     page.click("#chkTotal")
+    time.sleep(random.uniform(0.5, 1.0))
+    _move_mouse_to_element(page, "#enviarCorreo")
+    time.sleep(random.uniform(0.3, 0.7))
     page.click("#enviarCorreo")
+    time.sleep(random.uniform(0.5, 1.0))
+    _move_mouse_to_element(page, "#btnConfirmar")
+    time.sleep(random.uniform(0.3, 0.7))
     page.click("#btnConfirmar")
     time.sleep(2)
 
@@ -661,13 +732,13 @@ def _confirm(page, context: CustomerProfile):
         code = page.text_content("#justificanteFinal")
         logging.info(f"[done] Booking reference: {code}")
         if context.save_screenshots:
-            page.screenshot(path=f"CONFIRMED-CITA-{ctime}.png".replace(":", "-"))
+            page.screenshot(path=_debug_path(f"CONFIRMED-CITA-{ctime}.png".replace(":", "-")))
         return True
     elif "Lo sentimos, el código introducido no es correcto" in resp_text:
         logging.error("Incorrect SMS code entered")
     else:
         if context.save_screenshots:
-            page.screenshot(path=f"error-{ctime}.png".replace(":", "-"))
+            page.screenshot(path=_debug_path(f"error-{ctime}.png".replace(":", "-")))
 
     return None
 
@@ -701,7 +772,7 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
         else:
             logging.error(f"Page did not load #btnEntrar within 60s (body: {resp_text[:150]})")
             if context.save_screenshots:
-                page.screenshot(path=f"load-fail-{dt.now()}.png".replace(":", "-"))
+                page.screenshot(path=_debug_path(f"load-fail-{dt.now()}.png".replace(":", "-")))
             return None
 
     logging.info("ICP page loaded — sin Cl@ve option (#btnEntrar) found")
@@ -734,7 +805,7 @@ def _attempt_booking(page, context: CustomerProfile, url1: str, url2: str):
         if "requested URL was rejected" in resp_text:
             logging.warning(f"WAF blocked after Entrar (url: {page.url})")
             if context.save_screenshots:
-                page.screenshot(path=f"waf-block-{dt.now()}.png".replace(":", "-"))
+                page.screenshot(path=_debug_path(f"waf-block-{dt.now()}.png".replace(":", "-")))
             raise WAFBlocked("WAF blocked after Entrar")
         else:
             logging.error(f"Form page did not load after Entrar (body: {resp_text[:150]})")
@@ -860,9 +931,11 @@ def _submit_operation_from_portada(page, context: CustomerProfile):
 
     try:
         if context.save_screenshots:
-            page.screenshot(path=f"operation-selected-{dt.now()}.png".replace(":", "-"))
+            page.screenshot(path=_debug_path(f"operation-selected-{dt.now()}.png".replace(":", "-")))
 
         if page.query_selector("#btnAceptar"):
+            _move_mouse_to_element(page, "#btnAceptar")
+            time.sleep(random.uniform(0.3, 0.8))
             page.click("#btnAceptar")
         else:
             page.evaluate("envia();")
@@ -911,7 +984,7 @@ def run(context: CustomerProfile, max_attempts: int = DEFAULT_MAX_ATTEMPTS):
             if result is True:
                 logging.info("\033[32mWIN — Appointment booked!\033[0m")
                 if context.save_screenshots:
-                    page.screenshot(path=f"WIN-{dt.now()}.png".replace(":", "-"))
+                    page.screenshot(path=_debug_path(f"WIN-{dt.now()}.png".replace(":", "-")))
                 close_browser(browser)
                 return True
 
