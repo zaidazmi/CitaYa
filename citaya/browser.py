@@ -41,6 +41,20 @@ def _find_chrome() -> str:
     )
 
 
+def _minimize_browser(browser):
+    try:
+        page = browser.contexts[0].pages[0]
+        cdp = page.context.new_cdp_session(page)
+        window = cdp.send("Browser.getWindowForTarget")
+        cdp.send("Browser.setWindowBounds", {
+            "windowId": window["windowId"],
+            "bounds": {"windowState": "minimized"},
+        })
+        cdp.detach()
+    except Exception:
+        pass
+
+
 def launch_browser(context: CustomerProfile):
     global _chrome_process, _playwright_instance
 
@@ -66,9 +80,6 @@ def launch_browser(context: CustomerProfile):
         "--disable-renderer-backgrounding",
     ]
 
-    if context.start_minimized:
-        chrome_args.append("--start-minimized")
-
     _chrome_process = subprocess.Popen(
         chrome_args,
         stdout=subprocess.DEVNULL,
@@ -84,6 +95,8 @@ def launch_browser(context: CustomerProfile):
             time.sleep(2)
             browser = _playwright_instance.chromium.connect_over_cdp(cdp_url)
             logging.info("Playwright connected to Chrome via CDP")
+            if context.start_minimized:
+                _minimize_browser(browser)
             return browser
         except Exception as e:
             if attempt < 9:
