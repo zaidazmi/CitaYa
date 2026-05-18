@@ -18,6 +18,7 @@ customer = CustomerProfile(
     auto_office=True,
     save_screenshots=True,
     chrome_path=None,                           # Auto-detects Chrome, or set path manually
+    start_minimized=False,                      # True to start Chrome minimized
     province=Province.BARCELONA,
     operation_code=OperationType.TOMA_HUELLAS,  # Change to your procedure
     doc_type=DocType.NIE,                       # DocType.NIE, DocType.PASSPORT, or DocType.DNI

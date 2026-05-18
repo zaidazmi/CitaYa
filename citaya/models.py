@@ -169,6 +169,7 @@ class CustomerProfile:
     except_offices: Optional[list] = field(default_factory=list)
 
     chrome_path: Optional[str] = None
+    start_minimized: bool = False
     capsolver_api_key: Optional[str] = None
     auto_captcha: bool = True
     auto_office: bool = True

@@ -66,6 +66,9 @@ def launch_browser(context: CustomerProfile):
         "--disable-renderer-backgrounding",
     ]
 
+    if context.start_minimized:
+        chrome_args.append("--start-minimized")
+
     _chrome_process = subprocess.Popen(
         chrome_args,
         stdout=subprocess.DEVNULL,

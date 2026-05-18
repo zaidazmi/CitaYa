@@ -98,9 +98,9 @@ if __name__ == "__main__":
 python3 -u my_appointment.py
 ```
 
-A Chrome window opens and the bot starts polling. Leave it running — minimize or move it to another desktop if needed.
+A Chrome window opens and the bot starts polling. Leave it running.
 
-> **Note:** CitaYa requires a visible (headed) Chrome window. Headless mode does not work because F5 Shape Security's WAF challenge requires real browser rendering (canvas, WebGL) to pass.
+> **Note:** CitaYa requires a real (headed) Chrome window. Headless mode does not work because F5 Shape Security's WAF challenge requires real browser rendering (canvas, WebGL) to pass. Set `start_minimized=True` to keep Chrome out of the way.
 
 ## Configuration
 
@@ -125,6 +125,7 @@ A Chrome window opens and the bot starts polling. Leave it running — minimize 
 | `auto_captcha` | `True` | Solve captchas automatically |
 | `auto_office` | `True` | Auto-select available office |
 | `chrome_path` | auto-detect | Path to Chrome binary |
+| `start_minimized` | `False` | Start Chrome minimized (runs in background) |
 | `save_screenshots` | `False` | Save screenshots on events |
 | `offices` | `[]` | Specific offices to try (`Office` enum values) |
 | `except_offices` | `[]` | Offices to exclude |
