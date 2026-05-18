@@ -38,13 +38,6 @@ class TestCustomerProfileDefaults:
         )
         assert c.auto_captcha is True
 
-    def test_default_headless_is_false(self):
-        c = CustomerProfile(
-            name="Test", doc_type=DocType.NIE, doc_value="Y1234567X",
-            phone="600000000", email="test@test.com", country="INDIA",
-        )
-        assert c.headless is False
-
     def test_default_booked_is_false(self):
         c = CustomerProfile(
             name="Test", doc_type=DocType.NIE, doc_value="Y1234567X",

@@ -17,7 +17,6 @@ customer = CustomerProfile(
     auto_captcha=True,
     auto_office=True,
     save_screenshots=True,
-    headless=False,                             # True to run without visible browser
     chrome_path=None,                           # Auto-detects Chrome, or set path manually
     province=Province.BARCELONA,
     operation_code=OperationType.TOMA_HUELLAS,  # Change to your procedure

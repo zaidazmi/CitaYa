@@ -172,7 +172,6 @@ class CustomerProfile:
     capsolver_api_key: Optional[str] = None
     auto_captcha: bool = True
     auto_office: bool = True
-    headless: bool = False
     min_date: Optional[str] = None
     max_date: Optional[str] = None
     min_time: Optional[str] = None

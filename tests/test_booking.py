@@ -47,6 +47,31 @@ def test_best_matching_date_uses_chronological_order_when_filtering():
     assert _best_matching_date(["15/05/2026 09:00", "02/06/2026 09:00"], context) == "15/05/2026 09:00"
 
 
+class _MockElement:
+    def __init__(self, value=None, text=None, page=None):
+        self._value = value
+        self._text = text
+        self._page = page
+
+    def get_attribute(self, name):
+        if name == "value":
+            return self._value
+        return None
+
+    def inner_text(self):
+        return self._text or ""
+
+    def scroll_into_view_if_needed(self):
+        pass
+
+    def bounding_box(self):
+        return {"x": 100, "y": 100, "width": 80, "height": 30}
+
+    def click(self):
+        if self._page:
+            self._page.text = "Identidad del usuario de cita\nSelecciona Oficina:"
+
+
 class _OfficeFlowPage:
     def __init__(self, text):
         self.text = text
@@ -63,14 +88,24 @@ class _OfficeFlowPage:
     def query_selector(self, selector):
         return None
 
+    def query_selector_all(self, selector):
+        if "Solicitar" in self.text:
+            return [_MockElement(value="Solicitar Cita", page=self)]
+        return []
+
     def click(self, selector):
         self.clicked.append(selector)
 
+    def locator(self, selector):
+        return _MockElement()
+
     def evaluate(self, script):
-        if "Solicitar" in script and "Cita" in script:
-            self.text = "Identidad del usuario de cita\nSelecciona Oficina:"
-            return True
         raise AssertionError(f"Unexpected evaluate call: {script}")
+
+    class mouse:
+        @staticmethod
+        def move(x, y, steps=1):
+            pass
 
 
 def test_submit_office_clicks_solicitar_cita_then_siguiente(monkeypatch):
@@ -79,6 +114,7 @@ def test_submit_office_clicks_solicitar_cita_then_siguiente(monkeypatch):
     monkeypatch.setattr("citaya.booking.get_page_text", lambda p: p.text)
     monkeypatch.setattr("citaya.booking.time.sleep", lambda seconds: None)
     monkeypatch.setattr("citaya.booking.random.uniform", lambda start, end: 0)
+    monkeypatch.setattr("citaya.booking.random.randint", lambda start, end: start)
 
     assert _submit_office(page, _profile()) is True
     assert page.clicked == ["#btnSiguiente"]
@@ -90,6 +126,7 @@ def test_submit_office_accepts_preselected_office_without_enviar(monkeypatch):
 
     monkeypatch.setattr("citaya.booking.get_page_text", lambda p: p.text)
     monkeypatch.setattr("citaya.booking.time.sleep", lambda seconds: None)
+    monkeypatch.setattr("citaya.booking.random.randint", lambda start, end: start)
 
     assert _submit_office(page, _profile()) is True
     assert page.clicked == ["#btnSiguiente"]

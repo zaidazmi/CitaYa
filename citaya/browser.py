@@ -66,9 +66,6 @@ def launch_browser(context: CustomerProfile):
         "--disable-renderer-backgrounding",
     ]
 
-    if context.headless:
-        chrome_args.append("--headless=new")
-
     _chrome_process = subprocess.Popen(
         chrome_args,
         stdout=subprocess.DEVNULL,
