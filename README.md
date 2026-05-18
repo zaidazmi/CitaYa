@@ -16,8 +16,8 @@ Runs 24/7 on your machine until it locks down your appointment.
 ---
 
 > **Not a developer?** Paste this repo link into [ChatGPT](https://chat.openai.com), [Claude](https://claude.ai), or any AI assistant and ask:\
-> *"Help me set this up on my computer to book a cita previa."*\
-> It will walk you through every step.
+> *"Help me set up CitaYa on my computer to book a cita previa. I need help installing it, getting a CapSolver API key, and configuring my details (NIE/passport, province, procedure type, phone, and email)."*\
+> It will walk you through every step - from install to a running bot.
 
 ---
 
